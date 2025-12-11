@@ -3,9 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Gesture Breakout Pro</title>
+  <title>Gesture Breakout</title>
   <style>
     * { box-sizing: border-box; }
+    html { font-size: clamp(12px, 2vw, 16px); }
     body {
       margin: 0;
       min-height: 100vh;
@@ -16,6 +17,7 @@
       align-items: center;
       justify-content: center;
       padding: 1rem;
+      overflow: hidden;
     }
     .container {
       width: min(95vw, 1400px);
@@ -23,7 +25,7 @@
       background: rgba(0, 0, 0, 0.6);
       border: 1px solid rgba(0, 212, 255, 0.3);
       border-radius: 1.5rem;
-      box-shadow: 0 0 60px rgba(0, 212, 255, 0.2);
+      box-shadow: 0 0 60px rgba(0, 212, 255, 0.2), inset 0 0 60px rgba(0, 212, 255, 0.05);
       display: flex;
       flex-direction: column;
       overflow: hidden;
@@ -43,24 +45,6 @@
       letter-spacing: 0.1em;
       text-shadow: 0 0 20px rgba(0, 212, 255, 0.5);
     }
-    .header-stats {
-      display: flex;
-      gap: 2rem;
-    }
-    .stat {
-      text-align: center;
-    }
-    .stat-label {
-      font-size: 0.8rem;
-      color: rgba(0, 212, 255, 0.7);
-      text-transform: uppercase;
-    }
-    .stat-value {
-      font-size: 1.6rem;
-      font-weight: 700;
-      color: #00ff88;
-      text-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
-    }
     .main {
       flex: 1;
       display: grid;
@@ -74,6 +58,7 @@
       border: 1px solid rgba(0, 212, 255, 0.3);
       border-radius: 1rem;
       overflow: hidden;
+      background: radial-gradient(circle at 30% 30%, rgba(0, 212, 255, 0.05), transparent);
     }
     video, canvas {
       position: absolute;
@@ -81,32 +66,13 @@
       height: 100%;
       inset: 0;
     }
-    video { opacity: 0.2; object-fit: cover; }
+    video { opacity: 0.25; object-fit: cover; }
     .sidebar { display: flex; flex-direction: column; gap: 1.2rem; }
     .card {
       background: rgba(0, 212, 255, 0.08);
       border: 1px solid rgba(0, 212, 255, 0.2);
       padding: 1.2rem;
       border-radius: 0.8rem;
-    }
-    .btn {
-      width: 100%;
-      padding: 0.8rem;
-      border-radius: 0.6rem;
-      border: 1px solid rgba(0,212,255,0.5);
-      background: rgba(0,212,255,0.1);
-      color: #00d4ff;
-      cursor: pointer;
-      font-weight: 700;
-      transition: all 0.3s;
-    }
-    .btn:hover:not(:disabled) {
-      background: rgba(0,212,255,0.2);
-      box-shadow: 0 0 15px rgba(0,212,255,0.4);
-    }
-    .btn:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
     }
     .badge {
       padding: 0.6rem 0.8rem;
@@ -116,37 +82,26 @@
       color: #00d4ff;
       font-size: 0.8rem;
       font-weight: 600;
-      margin-bottom: 0.6rem;
     }
     .badge.active {
       border-color: #00ff88;
       background: rgba(0, 255, 136, 0.1);
       color: #00ff88;
     }
-    .info-text {
+    .card p {
+      margin: 0.4rem 0 0;
       font-size: 0.85rem;
       line-height: 1.5;
-      color: rgba(255,255,255,0.6);
+      color: rgba(255,255,255,0.8);
     }
   </style>
 </head>
 <body>
 <div class="container">
   <header>
-    <div class="header-title">🎮 GESTURE BREAKOUT PRO</div>
+    <div class="header-title">✋ Gesture Breakout</div>
     <div class="header-stats">
-      <div class="stat">
-        <div class="stat-label">Score</div>
-        <div class="stat-value" id="score">0</div>
-      </div>
-      <div class="stat">
-        <div class="stat-label">Level</div>
-        <div class="stat-value" id="level">1</div>
-      </div>
-      <div class="stat">
-        <div class="stat-label">Lives</div>
-        <div class="stat-value" id="lives">3</div>
-      </div>
+      <div class="badge">Score: <span id="score">0</span></div>
     </div>
   </header>
 
@@ -158,15 +113,16 @@
 
     <div class="sidebar">
       <div class="card">
-        <button class="btn" id="start-btn">START</button>
-        <button class="btn" id="reset-btn">RESET</button>
+        <div id="cam-badge" class="badge">Camera</div>
+        <div id="hand-badge" class="badge">Hands</div>
+        <div id="gesture-badge" class="badge">Gesture: ---</div>
       </div>
+      <div class="card" id="info">カメラ初期化中...</div>
       <div class="card">
-        <div id="cam-badge" class="badge">📹 Camera</div>
-        <div id="hand-badge" class="badge">✋ Hands</div>
-      </div>
-      <div class="card info-text" id="info">
-        Move your hand to control the paddle
+        <p>操作方法</p>
+        <p>・手を横に動かしてパドル操作</p>
+        <p>・握り動作：ゲーム開始/パワーショット</p>
+        <p>・Game Over後も握りで再スタート</p>
       </div>
     </div>
   </div>
@@ -180,82 +136,150 @@ const video = document.getElementById("video");
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
-const startBtn = document.getElementById("start-btn");
-const resetBtn = document.getElementById("reset-btn");
 const infoEl = document.getElementById("info");
 const scoreEl = document.getElementById("score");
-const levelEl = document.getElementById("level");
-const livesEl = document.getElementById("lives");
 const camBadge = document.getElementById("cam-badge");
 const handBadge = document.getElementById("hand-badge");
+const gestureBadge = document.getElementById("gesture-badge");
 
 let videoReady = false;
 let gameRunning = false;
 let score = 0;
-let level = 1;
-let lives = 3;
-let combo = 0;
 
 let hands;
 let handX = null;
+let grabActive = false;
+let lastGrabTime = 0;
+const GRAB_THRESHOLD = 0.065; // 親指と人差し指の距離で握り判定
+const GRAB_COOLDOWN = 1000;   // 連続入力の無効期間(ms)
 
-const GAME_WIDTH = 800;
-const GAME_HEIGHT = 600;
+// ▼ ブロック崩しの基本オブジェクト ▼
+let paddle = { x: 300, y: 450, w: 120, h: 20 };
+let ball = { x: 350, y: 300, vx: 5, vy: -5, r: 10 };
 
-let paddle = { x: 350, y: 550, w: 100, h: 20 };
-let ball = { x: 400, y: 300, vx: 5, vy: -5, r: 8 };
-let blocks = [];
-let powerUps = [];
+const BASE_SPEED = 6;        // 基本スピード
+const BOOST_DURATION = 1200; // パワーショット継続時間(ms)
+const BOOST_MULTIPLIER = 1.5;
 
-const FIX_SPEED = 6;
+let currentSpeed = BASE_SPEED;
+let boostTimer = null;
+let infoTimer = null;
 
 function normalizeBallSpeed() {
   const len = Math.hypot(ball.vx, ball.vy);
-  if (len === 0) return;
-  ball.vx = (ball.vx / len) * FIX_SPEED;
-  ball.vy = (ball.vy / len) * FIX_SPEED;
+  if(len === 0) return;
+  ball.vx = (ball.vx / len) * currentSpeed;
+  ball.vy = (ball.vy / len) * currentSpeed;
 }
 
+// ステータスラベルを更新（一定時間表示も可）
+function setStatus(message, duration = 0) {
+  infoEl.textContent = message;
+  if(infoTimer) clearTimeout(infoTimer);
+  if(duration > 0){
+    infoTimer = setTimeout(()=>{
+      infoEl.textContent = "握りジェスチャーで操作";
+    }, duration);
+  }
+}
+
+// パワーショット中は一時的に速度を引き上げる
+function applyPowerBoost() {
+  if(boostTimer) clearTimeout(boostTimer);
+  currentSpeed = BASE_SPEED * BOOST_MULTIPLIER;
+  boostTimer = setTimeout(()=>{
+    currentSpeed = BASE_SPEED;
+  }, BOOST_DURATION);
+}
+
+let blocks = [];
+
+// ブロック初期化
 function initBlocks() {
   blocks = [];
-  const rows = 4 + level;
-  const cols = 8;
+  const rows = 5, cols = 7;
   for (let y = 0; y < rows; y++) {
     for (let x = 0; x < cols; x++) {
-      const colors = ["#00ffaa", "#00d4ff", "#ff00aa", "#ffff00"];
       blocks.push({
-        x: 20 + x * 95,
-        y: 30 + y * 35,
-        w: 85,
-        h: 25,
-        alive: true,
-        color: colors[y % colors.length],
-        points: (rows - y) * 10
+        x: 40 + x * 90,
+        y: 40 + y * 40,
+        w: 80,
+        h: 30,
+        alive: true
       });
     }
   }
 }
+initBlocks();
 
-function createPowerUp(x, y, type) {
-  powerUps.push({
-    x: x,
-    y: y,
-    vx: (Math.random() - 0.5) * 4,
-    vy: 3,
-    type: type,
-    r: 8
-  });
-}
-
+// 衝突チェック
 function collideRect(ball, rect) {
   return (
-    ball.x + ball.r > rect.x &&
-    ball.x - ball.r < rect.x + rect.w &&
-    ball.y + ball.r > rect.y &&
-    ball.y - ball.r < rect.y + rect.h
+    ball.x > rect.x &&
+    ball.x < rect.x + rect.w &&
+    ball.y > rect.y &&
+    ball.y < rect.y + rect.h
   );
 }
 
+// 握り入力でゲームをセットアップ
+function startGameFromGesture(){
+  initBlocks();
+  score = 0;
+  scoreEl.textContent = score;
+  currentSpeed = BASE_SPEED;
+  const cw = canvas.width || canvas.parentElement.getBoundingClientRect().width || 800;
+  const ch = canvas.height || canvas.parentElement.getBoundingClientRect().height || 600;
+  paddle.x = cw / 2 - paddle.w / 2;
+  paddle.y = ch - 80;
+  ball.x = cw / 2;
+  ball.y = ch - 160;
+  ball.vx = currentSpeed;
+  ball.vy = -currentSpeed;
+  normalizeBallSpeed();
+  gameRunning = true;
+  setStatus("ゲーム開始！ 握りでパワーショット", 1500);
+}
+
+// プレイ中の握りはパワーショット扱い
+function triggerPowerShot(){
+  applyPowerBoost();
+  ball.vy = -Math.abs(ball.vy || 1);
+  normalizeBallSpeed();
+  setStatus("パワーショット！", 800);
+}
+
+// 握り連打を防ぐためのクールダウン判定
+function handleGrabGesture(){
+  const now = performance.now();
+  if(now - lastGrabTime < GRAB_COOLDOWN) return;
+  lastGrabTime = now;
+  if(!videoReady) return;
+  if(!gameRunning){
+    startGameFromGesture();
+  } else {
+    triggerPowerShot();
+  }
+}
+
+// 正規化ランドマーク間の距離取得
+function distance2D(a, b){
+  const dx = a.x - b.x;
+  const dy = a.y - b.y;
+  return Math.hypot(dx, dy);
+}
+
+// 親指＋人差し指の距離で握り動作を判定
+function isGrabGesture(lm){
+  const thumb = lm[4];
+  const index = lm[8];
+  const middle = lm[12];
+  const thumbIndex = distance2D(thumb, index);
+  const indexMiddle = distance2D(index, middle);
+  return thumbIndex < GRAB_THRESHOLD && indexMiddle < GRAB_THRESHOLD * 1.1;
+}
+
+// MediaPipe Hands 初期化
 async function initHands() {
   hands = new Hands({
     locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
@@ -270,191 +294,146 @@ async function initHands() {
     const lm = results.multiHandLandmarks;
     const detected = lm && lm.length > 0;
     handBadge.classList.toggle("active", detected);
-    if (!detected) return;
-    const tip = lm[0][8];
-    handX = tip.x * canvas.width;
+
+    if(!detected){
+      handX = null;
+      gestureBadge.textContent = "Gesture: ---";
+      gestureBadge.classList.remove("active");
+      grabActive = false;
+      return;
+    }
+
+    const primary = lm[0];
+    const tip = primary[8];
+    const width = canvas.width || canvas.clientWidth || 1;
+    handX = tip.x * width;
+
+    const grabbed = isGrabGesture(primary);
+    gestureBadge.textContent = grabbed ? "Gesture: GRAB" : "Gesture: OPEN";
+    gestureBadge.classList.toggle("active", grabbed);
+
+    if(grabbed && !grabActive){
+      handleGrabGesture();
+    }
+    grabActive = grabbed;
   });
 }
 
+// カメラ開始
 async function initCamera() {
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-    video.srcObject = stream;
-    await new Promise(r => video.onloadedmetadata = r);
-    video.play();
-    videoReady = true;
-    camBadge.classList.add("active");
+  const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+  video.srcObject = stream;
+  await new Promise(r => video.onloadedmetadata = r);
+  video.play();
+  videoReady = true;
+  camBadge.classList.add("active");
 
-    const cam = new Camera(video, {
-      onFrame: async () => { await hands.send({ image: video }); }
-    });
-    cam.start();
-  } catch (e) {
-    infoEl.textContent = "Camera error: " + e.message;
-  }
+  const cam = new Camera(video, {
+    onFrame: async () => { await hands.send({ image: video }); }
+  });
+  cam.start();
 }
 
-startBtn.onclick = async () => {
-  if (!videoReady) {
-    startBtn.textContent = "Initializing...";
+async function bootstrapGestureMode(){
+  try {
     await initHands();
     await initCamera();
-    startBtn.textContent = "START";
+    setStatus("握りジェスチャーでスタート");
+  } catch (err) {
+    setStatus("Camera error: " + err.message);
   }
-
-  level = 1;
-  score = 0;
-  lives = 3;
-  combo = 0;
-  initBlocks();
-  normalizeBallSpeed();
-  
-  scoreEl.textContent = score;
-  levelEl.textContent = level;
-  livesEl.textContent = lives;
-  
-  gameRunning = true;
-  startBtn.disabled = true;
-  infoEl.textContent = "Level " + level + " - Go!";
-};
-
-resetBtn.onclick = () => {
-  gameRunning = false;
-  startBtn.disabled = false;
-  score = 0;
-  level = 1;
-  lives = 3;
-  scoreEl.textContent = 0;
-  levelEl.textContent = 1;
-  livesEl.textContent = 3;
-  infoEl.textContent = "Press START to play";
-};
-
-function playSound(freq, duration) {
-  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  const osc = audioCtx.createOscillator();
-  const gain = audioCtx.createGain();
-  osc.connect(gain);
-  gain.connect(audioCtx.destination);
-  osc.frequency.value = freq;
-  gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
-  osc.start();
-  osc.stop(audioCtx.currentTime + duration);
 }
+bootstrapGestureMode();
 
 function loop() {
   const rect = canvas.parentElement.getBoundingClientRect();
   canvas.width = rect.width;
   canvas.height = rect.height;
 
-  ctx.fillStyle = "rgba(10,14,39,0.3)";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  ctx.strokeStyle = "rgba(0,212,255,0.05)";
-  for (let x = 0; x < canvas.width; x += 60) {
+  // 背景グリッド描画
+  ctx.strokeStyle = "rgba(0,212,255,0.07)";
+  for (let x = 0; x < canvas.width; x += 50) {
     ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
   }
-  for (let y = 0; y < canvas.height; y += 60) {
+  for (let y = 0; y < canvas.height; y += 50) {
     ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
   }
 
-  if (gameRunning) {
-    if (handX !== null) {
-      paddle.x = Math.max(0, Math.min(canvas.width - paddle.w, handX - paddle.w / 2));
-    }
+  // 常に手の位置でパドルを制御
+  if (handX !== null) {
+    paddle.x = handX - paddle.w / 2;
+  }
+  paddle.y = canvas.height - 80;
+  paddle.x = Math.max(20, Math.min(canvas.width - paddle.w - 20, paddle.x));
 
+  if (gameRunning) {
+    // ボール移動（速度は常に一定）
     ball.x += ball.vx;
     ball.y += ball.vy;
+    normalizeBallSpeed();
 
+    // 壁反射
     if (ball.x < ball.r || ball.x > canvas.width - ball.r) ball.vx *= -1;
     if (ball.y < ball.r) ball.vy *= -1;
 
+    // パドル衝突
     if (collideRect(ball, paddle)) {
       ball.vy = -Math.abs(ball.vy);
-      const diff = (ball.x - (paddle.x + paddle.w / 2)) / (paddle.w / 2);
-      ball.vx = diff * FIX_SPEED * 0.8;
-      combo += 1;
-      playSound(800, 0.1);
+      normalizeBallSpeed();
     }
 
+    // ブロック衝突
+    let aliveCount = 0;
     blocks.forEach(b => {
-      if (b.alive && collideRect(ball, b)) {
+      if (!b.alive) return;
+      aliveCount++;
+      if (collideRect(ball, b)) {
         ball.vy *= -1;
         b.alive = false;
-        score += b.points * combo;
+        score += 10;
         scoreEl.textContent = score;
-        playSound(1200, 0.1);
-        if (Math.random() < 0.2) createPowerUp(b.x + b.w / 2, b.y, "expand");
-        if (Math.random() < 0.1) createPowerUp(b.x + b.w / 2, b.y, "slowball");
-      }
-    });
-
-    powerUps = powerUps.filter(p => {
-      p.x += p.vx;
-      p.y += p.vy;
-      
-      if (collideRect(p, paddle)) {
-        if (p.type === "expand") paddle.w = Math.min(200, paddle.w + 30);
-        if (p.type === "slowball") {
-          ball.vx *= 0.7;
-          ball.vy *= 0.7;
-        }
-        playSound(1500, 0.15);
-        return false;
-      }
-      return p.y < canvas.height;
-    });
-
-    if (ball.y > canvas.height) {
-      combo = 0;
-      lives -= 1;
-      livesEl.textContent = lives;
-      if (lives <= 0) {
-        gameRunning = false;
-        infoEl.textContent = "Game Over! Final Score: " + score;
-        startBtn.disabled = false;
-      } else {
-        ball.x = paddle.x + paddle.w / 2;
-        ball.y = paddle.y - 30;
-        ball.vx = 5;
-        ball.vy = -5;
         normalizeBallSpeed();
       }
+    });
+
+    if (aliveCount === 0) {
+      gameRunning = false;
+      currentSpeed = BASE_SPEED;
+      setStatus("ALL CLEAR! 握って再スタート");
     }
 
-    if (blocks.filter(b => b.alive).length === 0) {
-      level += 1;
-      levelEl.textContent = level;
-      initBlocks();
-      ball.x = paddle.x + paddle.w / 2;
-      ball.y = paddle.y - 30;
-      combo = 0;
-      infoEl.textContent = "Level " + level + " - Ready!";
+    // 落下 → ゲームオーバー
+    if (ball.y > canvas.height + 50) {
+      gameRunning = false;
+      currentSpeed = BASE_SPEED;
+      setStatus("Game Over! 握って再スタート");
     }
+  } else {
+    // 待機中はパドル位置へボールを戻す
+    const targetX = paddle.x + paddle.w / 2;
+    const targetY = paddle.y - 30;
+    ball.x += (targetX - ball.x) * 0.15;
+    ball.y += (targetY - ball.y) * 0.15;
   }
 
+  // ブロック描画
   blocks.forEach(b => {
     if (!b.alive) return;
-    ctx.fillStyle = b.color;
+    ctx.fillStyle = "rgba(0,212,255,0.5)";
     ctx.fillRect(b.x, b.y, b.w, b.h);
-    ctx.strokeStyle = "rgba(255,255,255,0.3)";
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = "#00ffff";
     ctx.strokeRect(b.x, b.y, b.w, b.h);
   });
 
-  powerUps.forEach(p => {
-    ctx.fillStyle = p.type === "expand" ? "#ffff00" : "#00ff00";
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-    ctx.fill();
-  });
-
+  // パドル描画
   ctx.fillStyle = "#00ffaa";
   ctx.fillRect(paddle.x, paddle.y, paddle.w, paddle.h);
 
-  ctx.fillStyle = "#ff00aa";
+  // ボール描画
   ctx.beginPath();
+  ctx.fillStyle = "#ff00aa";
   ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
   ctx.fill();
 

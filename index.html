@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gesture Breakout</title>
+  <style>
+    * { box-sizing: border-box; }
+    html { font-size: clamp(12px, 2vw, 16px); }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: linear-gradient(135deg, #0a0e27 0%, #1a1a3e 100%);
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      overflow: hidden;
+    }
+    .container {
+      width: min(95vw, 1400px);
+      height: 95vh;
+      background: rgba(0, 0, 0, 0.6);
+      border: 1px solid rgba(0, 212, 255, 0.3);
+      border-radius: 1.5rem;
+      box-shadow: 0 0 60px rgba(0, 212, 255, 0.2), inset 0 0 60px rgba(0, 212, 255, 0.05);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      backdrop-filter: blur(10px);
+    }
+    header {
+      padding: 1.5rem 2rem;
+      background: linear-gradient(90deg, rgba(0, 212, 255, 0.1), rgba(0, 150, 255, 0.05));
+      border-bottom: 1px solid rgba(0, 212, 255, 0.2);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .header-title {
+      font-size: 1.8rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-shadow: 0 0 20px rgba(0, 212, 255, 0.5);
+    }
+    .main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 280px;
+      gap: 1.5rem;
+      padding: 1.5rem;
+      overflow: hidden;
+    }
+    .canvas-wrapper {
+      position: relative;
+      border: 1px solid rgba(0, 212, 255, 0.3);
+      border-radius: 1rem;
+      overflow: hidden;
+      background: radial-gradient(circle at 30% 30%, rgba(0, 212, 255, 0.05), transparent);
+    }
+    video, canvas {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      inset: 0;
+    }
+    video { opacity: 0.25; object-fit: cover; }
+    .sidebar { display: flex; flex-direction: column; gap: 1.2rem; }
+    .card {
+      background: rgba(0, 212, 255, 0.08);
+      border: 1px solid rgba(0, 212, 255, 0.2);
+      padding: 1.2rem;
+      border-radius: 0.8rem;
+    }
+    .btn {
+      width: 100%;
+      padding: 0.8rem;
+      border-radius: 0.6rem;
+      border: 1px solid rgba(0,212,255,0.5);
+      background: rgba(0,212,255,0.1);
+      color: #00d4ff;
+      cursor: pointer;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+    }
+    .badge {
+      padding: 0.6rem 0.8rem;
+      border-radius: 0.5rem;
+      border: 1px solid rgba(0,212,255,0.3);
+      background: rgba(0,212,255,0.05);
+      color: #00d4ff;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+    .badge.active {
+      border-color: #00ff88;
+      background: rgba(0, 255, 136, 0.1);
+      color: #00ff88;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div class="header-title">✋ Gesture Breakout</div>
+    <div class="header-stats">
+      <div class="badge">Score: <span id="score">0</span></div>
+    </div>
+  </header>
+
+  <div class="main">
+    <div class="canvas-wrapper">
+      <video id="video" playsinline muted></video>
+      <canvas id="canvas"></canvas>
+    </div>
+
+    <div class="sidebar">
+      <div class="card">
+        <button class="btn" id="start-btn">START</button>
+        <button class="btn" id="reset-btn">RESET</button>
+      </div>
+      <div class="card">
+        <div id="cam-badge" class="badge">Camera</div>
+        <div id="hand-badge" class="badge">Hands</div>
+      </div>
+      <div class="card" id="info">Press START</div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+
+<script>
+const video = document.getElementById("video");
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+const startBtn = document.getElementById("start-btn");
+const resetBtn = document.getElementById("reset-btn");
+const infoEl = document.getElementById("info");
+const scoreEl = document.getElementById("score");
+const camBadge = document.getElementById("cam-badge");
+const handBadge = document.getElementById("hand-badge");
+
+let videoReady = false;
+let gameRunning = false;
+let score = 0;
+
+let hands;
+let handX = null;
+
+// ▼ ブロック崩しの基本オブジェクト ▼
+let paddle = { x: 300, y: 450, w: 120, h: 20 };
+let ball = { x: 350, y: 300, vx: 5, vy: -5, r: 10 };
+
+const FIX_SPEED = 6;  // 一定速度
+
+function normalizeBallSpeed() {
+  const len = Math.hypot(ball.vx, ball.vy);
+  ball.vx = (ball.vx / len) * FIX_SPEED;
+  ball.vy = (ball.vy / len) * FIX_SPEED;
+}
+
+let blocks = [];
+
+// ブロック初期化
+function initBlocks() {
+  blocks = [];
+  const rows = 5, cols = 7;
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      blocks.push({
+        x: 40 + x * 90,
+        y: 40 + y * 40,
+        w: 80,
+        h: 30,
+        alive: true
+      });
+    }
+  }
+}
+
+// 衝突チェック
+function collideRect(ball, rect) {
+  return (
+    ball.x > rect.x &&
+    ball.x < rect.x + rect.w &&
+    ball.y > rect.y &&
+    ball.y < rect.y + rect.h
+  );
+}
+
+// MediaPipe Hands 初期化
+async function initHands() {
+  hands = new Hands({
+    locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
+  });
+  hands.setOptions({
+    maxNumHands: 1,
+    modelComplexity: 0,
+    minDetectionConfidence: 0.5,
+    minTrackingConfidence: 0.5
+  });
+  hands.onResults(results => {
+    const lm = results.multiHandLandmarks;
+    const detected = lm && lm.length > 0;
+    handBadge.classList.toggle("active", detected);
+
+    if (!detected) return;
+    const tip = lm[0][8];
+    handX = tip.x * canvas.width;
+  });
+}
+
+// カメラ開始
+async function initCamera() {
+  const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+  video.srcObject = stream;
+  await new Promise(r => video.onloadedmetadata = r);
+  video.play();
+  videoReady = true;
+  camBadge.classList.add("active");
+
+  const cam = new Camera(video, {
+    onFrame: async () => { await hands.send({ image: video }); }
+  });
+  cam.start();
+}
+
+startBtn.onclick = async () => {
+  if (!videoReady) {
+    await initHands();
+    await initCamera();
+  }
+
+  initBlocks();
+  normalizeBallSpeed();
+  score = 0;
+  scoreEl.textContent = score;
+
+  gameRunning = true;
+  startBtn.disabled = true;
+  infoEl.textContent = "Move your hand horizontally!";
+};
+
+resetBtn.onclick = () => {
+  gameRunning = false;
+  startBtn.disabled = false;
+  score = 0;
+  scoreEl.textContent = 0;
+  infoEl.textContent = "Press START";
+};
+
+function loop() {
+  const rect = canvas.parentElement.getBoundingClientRect();
+  canvas.width = rect.width;
+  canvas.height = rect.height;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // 背景グリッド
+  ctx.strokeStyle = "rgba(0,212,255,0.07)";
+  for (let x = 0; x < canvas.width; x += 50) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+  }
+  for (let y = 0; y < canvas.height; y += 50) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+  }
+
+  if (gameRunning) {
+    // パドル操作（手のX座標）
+    if (handX !== null) {
+      paddle.x = handX - paddle.w / 2;
+    }
+
+    // ★ ボールは一定速度で動く（加速しない）
+    ball.x += ball.vx;
+    ball.y += ball.vy;
+    normalizeBallSpeed();
+
+    // 壁反射
+    if (ball.x < ball.r || ball.x > canvas.width - ball.r) ball.vx *= -1;
+    if (ball.y < ball.r) ball.vy *= -1;
+
+    // パドル衝突
+    if (collideRect(ball, paddle)) {
+      ball.vy *= -1;
+      normalizeBallSpeed();
+    }
+
+    // ブロック衝突
+    blocks.forEach(b => {
+      if (b.alive && collideRect(ball, b)) {
+        ball.vy *= -1;
+        b.alive = false;
+        score += 10;
+        scoreEl.textContent = score;
+        normalizeBallSpeed();
+      }
+    });
+
+    // 落下 → ゲームオーバー
+    if (ball.y > canvas.height + 50) {
+      gameRunning = false;
+      infoEl.textContent = "Game Over!";
+      startBtn.disabled = false;
+    }
+  }
+
+  // ブロック描画
+  blocks.forEach(b => {
+    if (!b.alive) return;
+    ctx.fillStyle = "rgba(0,212,255,0.5)";
+    ctx.fillRect(b.x, b.y, b.w, b.h);
+    ctx.strokeStyle = "#00ffff";
+    ctx.strokeRect(b.x, b.y, b.w, b.h);
+  });
+
+  // パドル描画
+  ctx.fillStyle = "#00ffaa";
+  ctx.fillRect(paddle.x, paddle.y, paddle.w, paddle.h);
+
+  // ボール描画
+  ctx.beginPath();
+  ctx.fillStyle = "#ff00aa";
+  ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
+  ctx.fill();
+
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>
